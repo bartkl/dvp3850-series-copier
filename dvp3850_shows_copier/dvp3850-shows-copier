@@ -1,0 +1,244 @@
+#!/bin/env python3
+
+import enum
+from contextlib import contextmanager
+
+
+import json
+import sys
+from functools import lru_cache
+from pathlib import Path
+from typing import Union, Dict, Optional, TextIO
+from collections import UserDict
+from collections.abc import MutableMapping
+
+from pprint import pprint
+from pymediainfo import MediaInfo
+
+BASE_PATH = Path('/media/droppie/libraries/shows')
+
+JsonData = Union[Dict, str]
+
+ShowsEnum = enum.Enum('ShowsEnum',
+    {show.name: i for i, show in enumerate(BASE_PATH.iterdir())})
+
+# TODO
+# if show not in ShowsEnum._member_names_:
+#     raise ValueError(f'Unknown show "{show}".')
+
+
+class CompatCache(MutableMapping):
+    cache_file = Path('/home/bart/dvp3850-compat.json')
+
+    def clear(self):
+        self._data = {}
+
+    def keys(self):
+        return self._data.keys()
+
+    def values(self):
+        return self._data.values()
+
+    def items(self):
+        return self._data.items()
+
+    def __eq__(self, other):
+        return self.items() == other.items()
+
+    def __init__(self,
+                 cache_file: Optional[Union[str, Path]] = None,
+                 data: JsonData = '{}'):
+        if cache_file:
+            self.cache_file = Path(cache_file)
+
+        if not self.cache_file.exists():
+            self.cache_file.touch()
+
+        self._data = {}
+        
+        with self._open() as cache:
+            self._data.update(json.load(cache))
+
+    def _key_from_path(self, video_file: Union[Path, str]):
+        video_file = Path(video_file)
+
+        if BASE_PATH in video_file.parents:
+            video_file = video_file.relative_to(BASE_PATH)
+
+        show, season, episode = video_file.parts
+
+        if show not in ShowsEnum._member_names_:
+            raise ValueError(f'Unknown show "{show}".')
+
+        return show, season, episode
+    
+    def __delitem__(self, video_file):
+        show, season, episode = self._key_from_path(video_file)
+        del self._data \
+            .get(show) \
+            .get(season) \
+            [episode]
+
+    def __getitem__(self, video_file):
+        show, season, episode = self._key_from_path(video_file)
+        return self._data \
+            .get(show) \
+            .get(season) \
+            [episode]
+
+    def __setitem__(self, video_file: Union[Path, str], compat_val: int):
+        show, season, episode = self._key_from_path(video_file)
+        self._data \
+            .setdefault(show, {}) \
+            .setdefault(season, {}) \
+            [episode] = compat_val
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
+
+    @contextmanager
+    def _open(self, mode: str = 'r') -> TextIO:
+        cache = open(self.cache_file, mode)
+        yield cache
+        cache.close()
+
+    def read(self):
+        with self._open() as cache:
+            self._data = json.load(cache)
+
+    def write(self):
+        with self._open(mode='w') as cache:
+            cache.write(json.dumps(self._data, sort_keys=True, indent=4))
+
+    def set_compatible(self, video_file: Union[Path, str]):
+        self[video_file] = True
+
+    def set_incompatible(self, video_file: Union[Path, str]):
+        self[video_file] = False
+
+    def __repr__(self):
+        return repr(self._data)
+
+
+
+def is_ep_compat(ep: Path) -> bool:
+    """Determines if the video at the provided path is compatible
+    with the Philips DVP3850 player.
+
+    If the video file is present in the cache, its compatibility
+    will be read from there. Otherwise, it will be determined and
+    then written to the cache.
+
+    Args:
+        video: Video file to check.
+    
+    Returns:
+        `True` if compatible, `False` otherwise.
+    """
+
+    cache = CompatCache()
+
+    try:
+        return cache[ep.parent][ep.name]
+    except KeyError:
+        pass
+
+    cache.setdefault(str(ep.parent), {})[str(ep.name)] = True
+    # print(cache)
+    cache.write()
+    exit()
+
+    media_info = MediaInfo.parse(ep)
+    
+    video_compatible = False
+    audio_compatible = False
+    for info_track in media_info.tracks:
+        try:
+            if info_track.track_type == 'Video' and not video_compatible:
+                if (
+                    ((info_track.codec_id or '').lower() in ['xvid', 'divx'] or
+                    (info_track.codec_id_hint or '').lower() in ['xvid', 'divx']) and
+                    (1.3 <= float(info_track.display_aspect_ratio) < 1.34)):
+                        video_compatible = True
+            elif info_track.track_type == 'Audio' and not audio_compatible:
+                if ((info_track.codec_id or '').lower()  in ['a_ac3', 'mp3'] or
+                    (info_track.codec_id_hint or '').lower() in ['a_ac3', 'mp3']):
+                        audio_compatible = True
+        except AttributeError:
+            continue
+    return video_compatible and audio_compatible
+
+
+def check_all(cache: bool = True, verbose: bool = True):
+    if cache:
+        cache_file = open(CACHE_FILE, 'w')
+
+    for i, video_file in enumerate(sorted(FILES)):
+        if video_file.is_dir():
+            continue
+        
+        if verbose:
+            print(f'{video_file}... ', end='')
+
+        is_compatible = determine_compatibility(video_file)
+        if is_compatible:
+            print('yes')
+            cache_file.write(f'{video_file}\tyes\n')
+        else:
+            print('no')
+            cache_file.write(f'{video_file}\tno\n')
+
+        if i == 5:
+            break
+
+    cache_file.close()
+
+
+def test_cache():
+    cache = CompatCache('/home/bart/dvp3850-compat-test.json', data={})
+    cache.clear()
+    cache.write()
+
+    assert cache == {}
+
+    cache.set_compatible("/media/droppie/libraries/shows/South Park/Season 01/S01E01 - Cartman gets an anal probe.avi")
+    assert cache != {}
+    cache.clear()
+    assert cache == {}
+
+    cache.set_compatible("/media/droppie/libraries/shows/South Park/Season 01/S01E01 - Cartman gets an anal probe.avi")
+    cache.set_incompatible("South Park/Season 02/S02E02 - Cartman's mom is still a dirty slut.avi")
+    
+    ep = "/media/droppie/libraries/shows/South Park/Season 02/S02E03 - Chickenlover.avi"
+    cache.set_compatible(ep)
+    assert cache[ep] == True
+
+    cache.write()
+    
+    try:
+        cache.set_incompatible("Ssouth Park/Season 02/S02E02 - Cartman's mom is still a dirty slut.avi")
+    except ValueError as e:
+        if e.args[0] != 'Unknown show "Ssouth Park".':
+            raise
+
+    
+    
+
+
+
+if __name__ == '__main__':
+    test_cache()
+            
+
+
+    # copied = 0
+    # for video_file in FILES:
+    #     if video_file.is_dir():
+    #         continue
+    #     print(f'{video_file}...', end='')
+    #     if determine_compatibility(video_file)
+    #     print(is_compatible)
