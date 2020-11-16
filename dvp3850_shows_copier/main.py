@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import logging
 import random
 import shutil
 import sys
@@ -13,6 +14,20 @@ from pymediainfo import MediaInfo
 
 from .cache import Cache
 from .config import get_config
+
+
+prog_name = 'dvp3850-shows-copier'
+
+
+def console(msg):
+    return print(msg, end='', flush=True)
+
+
+def consoleln(msg=None):
+    if msg is None:
+        return print()
+    else:
+        return print(msg)
 
 
 def determine_compatibility(video_file: Path,
@@ -72,56 +87,59 @@ def run_copier(shows, base_path, target_path, count, cache, random_=True,
         zip_longest(*(_build_show_iter(show) for show in shows),
                     fillvalue=None))
 
+    # TODO: This double `for` can definitely be done nicer.
     for round_ in shows_iter:
         for video_file in round_:
             if not video_file or video_file.is_dir():
                 continue
 
-            if verbose:
-                print(f'{video_file.relative_to(base_path)}... ', end='')
+            consoleln(f'{video_file.relative_to(base_path)}:')
 
+            # TODO: Look for nicer solution to accessing the rel path of videofile.
+            if verbose:
+                # TODO: Maybe nice to have a max. char count of video_file and then cap it off.
+                console(f'   checking if compatible... ')
 
             try:
                 # TODO: Implement `in` contains check.
                 is_compatible = cache[video_file]
                 from_cache = True
             except Exception:
+                # TODO: This is a horrible way to manage `Extras` folders and such
+                # within the `Season *` dirs. Improve it.
+                if len(video_file.relative_to(base_path).parts) > 3:
+                    if verbose:
+                        consoleln('skipped')
+                    continue
+
                 is_compatible = determine_compatibility(video_file, cache)
                 from_cache = False
-            finally:
-                if verbose:
-                    print(('yes' if is_compatible else 'no') +
-                          (' (from cache)' if from_cache else ''), end='')
 
-            # TODO: This is a horrible way to manage `Extras` folders and such
-            # within the `Season *` dirs. Improve it.
-            try:
-                cache[video_file] = is_compatible
-            except ValueError:
-                print(f'skipped: {video_file}')
-                continue
+            if verbose:
+                consoleln(('yes' if is_compatible else 'no') +
+                          (' (from cache)' if from_cache else ''))
 
+            cache[video_file] = is_compatible
             cache.write()
 
             if is_compatible:
                 target = target_path / video_file.relative_to(base_path).parent.parent
+                console(f'   copying... ')
                 os.makedirs(target, exist_ok=True)
                 shutil.copy(video_file, target, follow_symlinks=True)
                 copied += 1
 
-                if verbose:
-                    print(f'; copied to {target}', end='')
-            print()
+                consoleln('ok')
 
             if copied >= count:
                 if verbose:
-                    print()
-                    print('done.')
+                    consoleln()
+                    consoleln('done.')
                 return
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='dvp3850-shows-copier')
+    parser = argparse.ArgumentParser(prog=prog_name)
 
     # TODO: Use type `ShowEnum`.
     parser.add_argument('show',
