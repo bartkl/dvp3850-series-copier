@@ -2,25 +2,20 @@ import os
 from configparser import ConfigParser, ExtendedInterpolation
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 
-DEFAULT_CONFIG_FILE = Path(os.getenv('DVP3850_SHOWS_COPIER_CONFIG',
-    '~/.config/dvp3850-shows-copier/config.ini'))
-
-
-class Converters:
-    @staticmethod
-    def abspath(val):
-        return Path(val).expanduser().absolute()
+def get_default_config_path() -> Path:
+    return Path(os.getenv('DVP3850_SHOWS_COPIER_CONFIG',
+                          '~/.config/dvp3850-shows-copier/config.ini'))
 
 
 @lru_cache()
-def get_config(config_file: Optional[Path] = DEFAULT_CONFIG_FILE):
-    config = ConfigParser(
-        interpolation=ExtendedInterpolation(),
-        converters={'abspath': Converters.abspath})
+def get_config(config_file: Optional[Path] = None):
+    if not config_file:
+        config_file = get_default_config_path()
 
+    config = ConfigParser(interpolation=ExtendedInterpolation())
     config.read_file(config_file.expanduser().open())
 
     return config 

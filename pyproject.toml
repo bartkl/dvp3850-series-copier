@@ -10,6 +10,7 @@ python = "^3.7"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.1.2"
+pytest-datadir = "^1.3.1"
 
 [build-system]
 requires = ["poetry>=0.12"]
