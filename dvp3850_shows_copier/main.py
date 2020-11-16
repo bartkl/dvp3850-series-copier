@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+from itertools import zip_longest, cycle
 from pathlib import Path
 from typing import Optional
 
@@ -48,17 +49,21 @@ def determine_compatibility(video_file: Path,
 def run_copier(shows, base_path, target_path, count, cache, random=True,
                uniformous=None, verbose=True):
 
-    # print(shows, base_path, target_path, cache.cache_file, random, uniformous, verbose)
+    # TODO: Implement other features.
+    # For now, whatever options you pass in, it will always do the following:
+    #   - Randomize.
+    #   - Pick equal amounts from every series.
 
     copied = 0
-    for show in shows:
-        if '/Season ' in show and int(show[-1]) in range(10):
-            show_iter = (config['general'].getpath('base path') / show).rglob('*')
-        else:
-            show_iter = (config['general'].getpath('base path') / show).rglob('Season */*')
+    shows_iter = cycle(zip_longest(*(
+        (base_path / show).rglob('*')
+        if '/Season ' in show and int(show[-1]) in range(10)
+        else (base_path / show).rglob('Season */*')
+        for show in shows), fillvalue=None))
 
-        for video_file in sorted(show_iter):
-            if video_file.is_dir():
+    for round_ in shows_iter:
+        for video_file in round_:
+            if not video_file or video_file.is_dir():
                 continue
 
             if verbose:
