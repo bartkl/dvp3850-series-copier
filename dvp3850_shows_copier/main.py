@@ -1,6 +1,9 @@
 #!/bin/env python3
 
 import argparse
+import os
+import random
+import shutil
 import sys
 from itertools import zip_longest, cycle
 from pathlib import Path
@@ -46,7 +49,7 @@ def determine_compatibility(video_file: Path,
     return video_compatible and audio_compatible
 
 
-def run_copier(shows, base_path, target_path, count, cache, random=True,
+def run_copier(shows, base_path, target_path, count, cache, random_=True,
                uniformous=None, verbose=True):
 
     # TODO: Implement other features.
@@ -57,9 +60,12 @@ def run_copier(shows, base_path, target_path, count, cache, random=True,
     def _build_show_iter(show):
         show_path = base_path / show
         if '/Season ' in show and int(show[-1]) in range(10):
-            return show_path.rglob('*')
+            show_list = list(show_path.rglob('*'))
         else:
-            return show_path.rglob('Season */*')
+            show_list = list(show_path.rglob('*Season */*'))
+
+        random.shuffle(show_list)
+        return show_list
 
     copied = 0
     shows_iter = cycle(
@@ -78,27 +84,40 @@ def run_copier(shows, base_path, target_path, count, cache, random=True,
             try:
                 # TODO: Implement `in` contains check.
                 is_compatible = cache[video_file]
+                from_cache = True
             except Exception:
                 is_compatible = determine_compatibility(video_file, cache)
+                from_cache = False
+            finally:
+                if verbose:
+                    print(('yes' if is_compatible else 'no') +
+                          (' (from cache)' if from_cache else ''), end='')
 
-            if verbose:
-                print(('yes' if is_compatible else 'no') + ' (from cache)', end='')
+            # TODO: This is a horrible way to manage `Extras` folders and such
+            # within the `Season *` dirs. Improve it.
+            try:
+                cache[video_file] = is_compatible
+            except ValueError:
+                print(f'skipped: {video_file}')
+                continue
 
-            cache[video_file] = is_compatible
             cache.write()
 
             if is_compatible:
+                target = target_path / video_file.relative_to(base_path).parent.parent
+                os.makedirs(target, exist_ok=True)
+                shutil.copy(video_file, target, follow_symlinks=True)
                 copied += 1
-                if copied >= count:
-                    if verbose:
-                        print()
-                        print('done.')
-                    return
 
                 if verbose:
-                    print(f'; copied')
-            else:
-                print()
+                    print(f'; copied to {target}', end='')
+            print()
+
+            if copied >= count:
+                if verbose:
+                    print()
+                    print('done.')
+                return
 
 
 if __name__ == '__main__':
@@ -134,6 +153,6 @@ if __name__ == '__main__':
     cache = Cache(config['general'].getpath('cache file'), base_path)
 
     run_copier(args.show, base_path, target_path, args.count, cache,
-               random=args.random, uniformous=args.uniformous,
+               random_=args.random, uniformous=args.uniformous,
                verbose=args.verbose)
 
