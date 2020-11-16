@@ -3,14 +3,16 @@
 import sys
 from pathlib import Path
 
-from pprint import pprint
 from pymediainfo import MediaInfo
 
+from .cache import Cache
+from .config import get_config
 
-BASE_PATH = Path('/media/droppie/libraries/shows')
+
+Config = get_config()
 
 
-def is_ep_compat(ep: Path) -> bool:
+def determine_compatibility(video_file: Path) -> bool:
     """Determines if the video at the provided path is compatible
     with the Philips DVP3850 player.
 
@@ -19,25 +21,25 @@ def is_ep_compat(ep: Path) -> bool:
     then written to the cache.
 
     Args:
-        video: Video file to check.
+        video_file: Video file to check.
     
     Returns:
         `True` if compatible, `False` otherwise.
     """
 
-    cache = CompatCache()
+    cache = Cache(Config['general']['cache file'], Config['library']['base path'])
 
     try:
-        return cache[ep.parent][ep.name]
+        return cache[video_file.parent][video_file.name]
     except KeyError:
         pass
 
-    cache.setdefault(str(ep.parent), {})[str(ep.name)] = True
+    cache.setdefault(str(video_file.parent), {})[str(video_file.name)] = True
     # print(cache)
     cache.write()
     exit()
 
-    media_info = MediaInfo.parse(ep)
+    media_info = MediaInfo.parse(video_file)
     
     video_compatible = False
     audio_compatible = False
@@ -84,14 +86,12 @@ def check_all(cache: bool = True, verbose: bool = True):
 
 
 if __name__ == '__main__':
-    pass
-            
+    shows = map(Path, sys.argv[1:])
 
-
-    # copied = 0
-    # for video_file in FILES:
-    #     if video_file.is_dir():
-    #         continue
-    #     print(f'{video_file}...', end='')
-    #     if determine_compatibility(video_file)
-    #     print(is_compatible)
+    copied = 0
+    for video_file in shows:
+        if video_file.is_dir():
+            continue
+        print(f'{video_file}...', end='')
+        is_compatible = determine_compatibility(video_file)
+        print(is_compatible)
