@@ -29,15 +29,15 @@ def test__get_config_from_default_path(monkeypatch, global_datadir):
     monkeypatch.setitem(os.environ, 'DVP3850_SHOWS_COPIER_CONFIG', str(config_file))
     cfg = config.get_config()
 
-    assert cfg['library']
+    assert cfg['general']
 
 
 def test__get_config_from_provded_path(monkeypatch, global_datadir):
     config_file = global_datadir / 'config.ini'
     cfg = config.get_config(config_file)
 
-    assert cfg['library']
+    assert cfg['general']
 
 
 def test_config(fake_config):
-    assert fake_config['library']['base path'] == '/media/droppie/libraries/shows'
+    assert fake_config['general']['base path'] == '/media/droppie/libraries/shows'

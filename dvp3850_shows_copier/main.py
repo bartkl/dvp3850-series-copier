@@ -45,7 +45,7 @@ def determine_compatibility(video_file: Path,
     return video_compatible and audio_compatible
 
 
-def run_copier(shows, base_path, target_path, cache, random=True,
+def run_copier(shows, base_path, target_path, count, cache, random=True,
                uniformous=None, verbose=True):
 
     # print(shows, base_path, target_path, cache.cache_file, random, uniformous, verbose)
@@ -62,7 +62,7 @@ def run_copier(shows, base_path, target_path, cache, random=True,
                 continue
 
             if verbose:
-                print(f'{video_file.name}... ', end='')
+                print(f'{video_file.relative_to(base_path)}... ', end='')
 
 
             try:
@@ -72,10 +72,23 @@ def run_copier(shows, base_path, target_path, cache, random=True,
                 is_compatible = determine_compatibility(video_file, cache)
 
             if verbose:
-                print(('yes' if is_compatible else 'no') + ' (from cache)')
+                print(('yes' if is_compatible else 'no') + ' (from cache)', end='')
 
             cache[video_file] = is_compatible
             cache.write()
+
+            if is_compatible:
+                copied += 1
+                if copied >= count:
+                    if verbose:
+                        print()
+                        print('done.')
+                    return
+
+                if verbose:
+                    print(f'; copied')
+            else:
+                print()
 
 
 if __name__ == '__main__':
@@ -110,6 +123,7 @@ if __name__ == '__main__':
     target_path = config['general'].getpath('target base path')
     cache = Cache(config['general'].getpath('cache file'), base_path)
 
-    run_copier(args.show, base_path, target_path, cache, random=args.random,
-               uniformous=args.uniformous, verbose=args.verbose)
+    run_copier(args.show, base_path, target_path, args.count, cache,
+               random=args.random, uniformous=args.uniformous,
+               verbose=args.verbose)
 
