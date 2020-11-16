@@ -54,12 +54,17 @@ def run_copier(shows, base_path, target_path, count, cache, random=True,
     #   - Randomize.
     #   - Pick equal amounts from every series.
 
+    def _build_show_iter(show):
+        show_path = base_path / show
+        if '/Season ' in show and int(show[-1]) in range(10):
+            return show_path.rglob('*')
+        else:
+            return show_path.rglob('Season */*')
+
     copied = 0
-    shows_iter = cycle(zip_longest(*(
-        (base_path / show).rglob('*')
-        if '/Season ' in show and int(show[-1]) in range(10)
-        else (base_path / show).rglob('Season */*')
-        for show in shows), fillvalue=None))
+    shows_iter = cycle(
+        zip_longest(*(_build_show_iter(show) for show in shows),
+                    fillvalue=None))
 
     for round_ in shows_iter:
         for video_file in round_:
