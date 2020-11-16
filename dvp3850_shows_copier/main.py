@@ -27,7 +27,8 @@ def determine_compatibility(video_file: Path) -> bool:
         `True` if compatible, `False` otherwise.
     """
 
-    cache = Cache(Config['general']['cache file'], Config['library']['base path'])
+    cache = Cache(Config['general'].getpath('cache file'),
+                  Config['library'].getpath('base path'))
 
     try:
         return cache[video_file.parent][video_file.name]
