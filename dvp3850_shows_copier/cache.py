@@ -1,34 +1,35 @@
+import enum
 import json
 from functools import lru_cache
 from collections.abc import MutableMapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Union, Optional, TextIO, Dict
+from typing import Union, TextIO, Dict
 
 JsonData = Union[Dict, str]
 
 
 @lru_cache()
 def get_shows_enum(base_path: Path):
-    return enum.Enum('ShowsEnum',
-        {show.name: i for i, show in enumerate(base_path.iterdir())})
+    return \
+        enum.Enum('ShowsEnum',
+                  {show.name: i for i, show in enumerate(base_path.iterdir())})
 
 
 class Cache(MutableMapping):
 
-    def __init__(self,
-                 cache_file: Path,
-		 base_path: Path,
-                 data: JsonData = '{}'):
+    def __init__(self, cache_file: Path, base_path: Path):
         self._data = {}
         self.cache_file = cache_file
-	self.base_path = base_path
+        self.base_path = base_path
 
         if not self.cache_file.exists():
             self.cache_file.touch()
-        else:
-            with self._open() as cache:
-                self._data.update(json.load(cache))
+
+        if self.cache_file.stat().st_size == 0:
+            self.cache_file.write_text('{}')
+
+        self.read()
 
     def keys(self):
         return self._data.keys()
@@ -46,22 +47,19 @@ class Cache(MutableMapping):
         show, season, episode = self._key_from_path(video_file)
         del self._data \
             .get(show) \
-            .get(season) \
-            [episode]
+            .get(season)[episode]
 
     def __getitem__(self, video_file):
         show, season, episode = self._key_from_path(video_file)
         return self._data \
             .get(show) \
-            .get(season) \
-            [episode]
+            .get(season)[episode]
 
     def __setitem__(self, video_file: Union[Path, str], compat_val: int):
         show, season, episode = self._key_from_path(video_file)
         self._data \
             .setdefault(show, {}) \
-            .setdefault(season, {}) \
-            [episode] = compat_val
+            .setdefault(season, {})[episode] = compat_val
 
     def __iter__(self):
         return iter(self._data)
@@ -74,7 +72,6 @@ class Cache(MutableMapping):
 
     def clear(self):
         self._data = {}
-
 
     def _key_from_path(self, video_file: Union[Path, str]):
         video_file = Path(video_file)
@@ -108,4 +105,3 @@ class Cache(MutableMapping):
     def write(self):
         with self._open(mode='w') as cache:
             cache.write(json.dumps(self._data, sort_keys=True, indent=4))
-
